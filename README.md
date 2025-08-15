@@ -2,14 +2,37 @@
 
 A secure and transparent intermediary for LLM applications that intercepts, inspects, and modifies outgoing requests before forwarding them to official LLM provider APIs.
 
+## 📋 Requirements
+
+### System Requirements
+- **Node.js**: Version 18 or higher
+- **npm**: Version 8 or higher
+- **Docker**: For PostgreSQL database
+- **PostgreSQL**: Version 13 or higher (via Docker)
+
+### API Keys Required
+- **OpenAI API Key**: For OpenAI API access
+- **Anthropic API Key**: For Anthropic API access
+
+
 ## 🚀 Quick Start
 
-1. **Install dependencies:**
+1. **Clone the repository (if not already done):**
+   ```bash
+   git clone https://github.com/netn10/Lasso-Security-LLM-Proxy-Service.git
+   cd Lasso-Security-LLM-Proxy-Service
+   ```
+
+2. **Ensure Docker is running:**
+   - Make sure Docker Desktop is started and running on your system
+   - Verify Docker is accessible by running: `docker --version`
+
+2. **Install dependencies:**
    ```bash
    npm install
    ```
 
-2. **Start PostgreSQL database:**
+3. **Start PostgreSQL database:**
    ```bash
    npm run docker:up
    ```
@@ -34,6 +57,30 @@ A secure and transparent intermediary for LLM applications that intercepts, insp
    - OpenAI: `http://localhost:3000/openai/*path`
    - Anthropic: `http://localhost:3000/anthropic/*path`
    - Dashboard: `http://localhost:3000/dashboard`
+
+### Optional Steps
+
+7. **Run tests to verify everything works:**
+   ```bash
+   npm run test:all
+   ```
+
+8. **Explore the dashboard:**
+   - Open `http://localhost:3000/dashboard` in your browser
+   - Monitor real-time requests and proxy performance
+   - View analytics and security events
+
+9. **Try the example Flask application:**
+   ```bash
+   cd example-use-case
+   cp env.example .env
+   # Edit .env with your API keys
+   pip install -r requirements.txt
+   python app.py
+   ```
+   - Access the chat interface at `http://localhost:5000`
+   - Test the proxy with a real chat application
+   - See [example-use-case/README.md](example-use-case/README.md) for detailed instructions
 
 ## ✨ Features
 
