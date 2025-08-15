@@ -4,12 +4,13 @@
  */
 
 const axios = require('axios');
+const { getDefaultModel } = require('./utils/model-config');
 
 const PROXY_BASE_URL = 'http://localhost:3000';
 
 // Test data with sensitive information
 const testData = {
-  model: 'gpt-3.5-turbo',
+  model: getDefaultModel('openai'),
   messages: [
     {
       role: 'user',
@@ -53,7 +54,7 @@ async function testAnthropicProxy() {
   console.log('\n🧪 Testing Anthropic proxy...');
   
   const anthropicData = {
-    model: 'claude-3-sonnet-20240229',
+    model: getDefaultModel('anthropic'),
     max_tokens: 50,
     messages: [
       {

@@ -54,7 +54,7 @@ class DataSanitizationService {
     return sanitized;
   }
 
-  getSanitizationStats(originalData, sanitizedData) {
+  getSanitizationStats(originalData) {
     const originalText = JSON.stringify(originalData);
     
     const emailsFound = (originalText.match(this.patterns.email) || []).length;

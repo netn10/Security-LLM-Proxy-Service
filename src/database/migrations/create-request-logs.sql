@@ -1,10 +1,11 @@
--- Migration: Create request_logs table
--- Date: 2024-01-01
 -- Description: Initial migration to create the request_logs table
+
+-- Ensure required extension for UUID generation is available
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TABLE IF NOT EXISTS request_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     provider VARCHAR(50) NOT NULL,
     anonymizedPayload TEXT NOT NULL,
     action VARCHAR(50) NOT NULL,

@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { getDefaultModel } = require('./utils/model-config');
 
 const BASE_URL = 'http://localhost:3000';
 
@@ -17,7 +18,7 @@ const TEST_CONFIG = {
 // Test data with sensitive information
 const TEST_DATA = {
   openai: {
-    model: 'gpt-3.5-turbo',
+    model: getDefaultModel('openai'),
     messages: [
       {
         role: 'user',
@@ -26,7 +27,7 @@ const TEST_DATA = {
     ],
   },
   anthropic: {
-    model: 'claude-3-sonnet-20240229',
+    model: getDefaultModel('anthropic'),
     max_tokens: 1000,
     messages: [
       {
@@ -40,21 +41,21 @@ const TEST_DATA = {
 // Financial content test data
 const FINANCIAL_TEST_DATA = {
   openai: {
-    model: 'gpt-3.5-turbo',
+    model: getDefaultModel('openai'),
     messages: [
       {
         role: 'user',
-        content: 'Help me with my investment portfolio and stock trading strategy',
+        content: 'help me with my bank account',
       },
     ],
   },
   anthropic: {
-    model: 'claude-3-sonnet-20240229',
+    model: getDefaultModel('anthropic'),
     max_tokens: 1000,
     messages: [
       {
         role: 'user',
-        content: 'I need advice on my mortgage and loan applications',
+        content: 'I need help with my banking',
       },
     ],
   },
@@ -164,7 +165,7 @@ async function testCaching() {
   
   try {
     const testData = {
-      model: 'gpt-3.5-turbo',
+      model: getDefaultModel('openai'),
       messages: [
         {
           role: 'user',

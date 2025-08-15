@@ -2,6 +2,7 @@ import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
+import { getDefaultModel } from '../config/models.config';
 
 @Injectable()
 export class PolicyEnforcementService {
@@ -15,6 +16,12 @@ export class PolicyEnforcementService {
    */
   async checkFinancialContent(content: string): Promise<boolean> {
     try {
+      // First, do a quick keyword-based check for obvious financial content
+      if (this.hasFinancialKeywords(content)) {
+        console.log(`🔒 Financial keywords detected: "${content.substring(0, 100)}..."`);
+        return true;
+      }
+
       // Use OpenAI for classification (lightweight model for speed)
       const classificationPrompt = `
 You are a content classifier. Determine if the following text is specifically about financial services, transactions, or financial advice.
@@ -28,6 +35,8 @@ ONLY classify as FINANCIAL if the text is explicitly about:
 - Tax preparation or filing
 - Payment processing or financial transactions
 - Financial planning or budgeting services
+- Banking services or account management
+- Financial advice or consulting
 
 DO NOT classify as FINANCIAL if the text:
 - Mentions money in general conversation
@@ -46,7 +55,7 @@ ${content.substring(0, 1000)} // Limit to first 1000 chars for efficiency
         this.httpService.post(
           `${this.configService.get('OPENAI_API_URL')}/v1/chat/completions`,
           {
-            model: 'gpt-3.5-turbo',
+            model: getDefaultModel('openai'),
             messages: [
               {
                 role: 'user',
@@ -91,8 +100,8 @@ ${content.substring(0, 1000)} // Limit to first 1000 chars for efficiency
       return isFinancial;
     } catch (error) {
       console.error('❌ Financial content check error:', error.message);
-      // If classification fails, allow the request to proceed (fail-safe)
-      return false;
+      // If classification fails, fall back to keyword detection
+      return this.hasFinancialKeywords(content);
     }
   }
 
@@ -143,7 +152,7 @@ ${content.substring(0, 1000)} // Limit to first 1000 chars for efficiency
     }
 
     // Additional conservative check: don't block if content is very long (likely complex)
-    if (trimmedContent.length > 2000) {
+    if (trimmedContent.length > 1000) {
       console.log('📝 Content too long for financial classification, allowing');
       return false; // Too long, allow to avoid false positives
     }
@@ -169,10 +178,12 @@ ${content.substring(0, 1000)} // Limit to first 1000 chars for efficiency
       lowerContent.includes(keyword)
     );
     
+    // Expanded list of clear financial keywords
     const clearFinancialKeywords = [
       'loan', 'mortgage', 'credit', 'investment', 'stock', 'bond',
       'insurance', 'banking', 'cryptocurrency', 'tax', 'payment',
-      'transaction', 'portfolio', 'trading'
+      'transaction', 'portfolio', 'trading', 'account', 'bank',
+      'deposit', 'withdrawal', 'transfer', 'financial', 'advisor'
     ];
     
     const hasClearFinancialKeywords = clearFinancialKeywords.some(keyword => 
@@ -210,7 +221,7 @@ ${content.substring(0, 500)}
         this.httpService.post(
           `${this.configService.get('OPENAI_API_URL')}/v1/chat/completions`,
           {
-            model: 'gpt-3.5-turbo',
+            model: getDefaultModel('openai'),
             messages: [
               {
                 role: 'user',
@@ -236,5 +247,57 @@ ${content.substring(0, 500)}
       // If verification fails, allow the request (fail-safe)
       return false;
     }
+  }
+
+  /**
+   * Check for financial keywords in content
+   */
+  private hasFinancialKeywords(content: string): boolean {
+    const lowerContent = content.toLowerCase();
+    
+    // Comprehensive list of financial keywords and phrases
+    const financialKeywords = [
+      // Banking and accounts
+      'bank account', 'banking', 'bank', 'account', 'checking account', 'savings account',
+      'deposit', 'withdrawal', 'transfer', 'wire transfer', 'direct deposit',
+      'online banking', 'mobile banking', 'atm', 'debit card', 'credit card',
+      
+      // Loans and credit
+      'loan', 'mortgage', 'credit', 'credit card', 'credit score', 'credit report',
+      'borrow', 'lending', 'interest rate', 'apr', 'payment plan', 'installment',
+      'refinance', 'home equity', 'personal loan', 'business loan', 'student loan',
+      
+      // Investment and trading
+      'invest', 'investment', 'stock', 'bond', 'portfolio', 'trading', 'trader',
+      'broker', 'brokerage', 'mutual fund', 'etf', 'dividend', 'capital gains',
+      'retirement', '401k', 'ira', 'roth', 'pension', 'annuity',
+      
+      // Insurance
+      'insurance', 'policy', 'premium', 'claim', 'coverage', 'deductible',
+      'life insurance', 'health insurance', 'auto insurance', 'home insurance',
+      
+      // Cryptocurrency
+      'cryptocurrency', 'crypto', 'bitcoin', 'ethereum', 'blockchain', 'wallet',
+      'mining', 'trading', 'exchange', 'ico', 'token',
+      
+      // Tax and financial planning
+      'tax', 'taxes', 'tax return', 'tax filing', 'deduction', 'exemption',
+      'financial planning', 'budget', 'budgeting', 'financial advisor',
+      'wealth management', 'estate planning', 'trust', 'will',
+      
+      // Payment and transactions
+      'payment', 'transaction', 'billing', 'invoice', 'receipt', 'refund',
+      'paypal', 'venmo', 'zelle', 'cash app', 'stripe', 'square',
+      
+      // Financial services
+      'financial services', 'financial advice', 'financial consultant',
+      'wealth advisor', 'money management', 'asset management',
+      
+      // Common phrases
+      'help me with my bank', 'help with my account', 'manage my money',
+      'financial help', 'money advice', 'financial assistance'
+    ];
+    
+    return financialKeywords.some(keyword => lowerContent.includes(keyword));
   }
 }

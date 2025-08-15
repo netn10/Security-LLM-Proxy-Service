@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NatiChat</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <style>
+        :root {
+            --bg-primary: #1a1a1a;
+            --bg-secondary: #2d2d2d;
+            --bg-tertiary: #3a3a3a;
+            --text-primary: #ffffff;
+            --text-secondary: #e0e0e0;
+            --text-muted: #a0a0a0;
+            --border-color: #404040;
+            --header-bg: #2d1b69;
+            --header-text: #ffffff;
+            --accent-color: #4dabf7;
+            --accent-hover: #339af0;
+            --success-color: #51cf66;
+            --error-color: #ff6b6b;
+            --ai-color: #4dabf7;
+            --shadow: 0 1px 3px rgba(0,0,0,0.3);
+            --shadow-hover: 0 4px 12px rgba(0,0,0,0.4);
+        }
+
+        [data-theme="light"] {
+            --bg-primary: #f8f9fa;
+            --bg-secondary: #ffffff;
+            --bg-tertiary: #f8f9fa;
+            --text-primary: #1a1a1a;
+            --text-secondary: #2c2c2c;
+            --text-muted: #6c757d;
+            --border-color: #e1e5e9;
+            --header-bg: #4a154b;
+            --header-text: #ffffff;
+            --accent-color: #007bff;
+            --accent-hover: #0056b3;
+            --success-color: #28a745;
+            --error-color: #dc3545;
+            --ai-color: #007bff;
+            --shadow: 0 1px 3px rgba(0,0,0,0.1);
+            --shadow-hover: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .header {
+            background: var(--header-bg);
+            color: var(--header-text);
+            padding: 1.25rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .header h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .theme-toggle {
+            background: none;
+            border: 1px solid var(--header-text);
+            color: var(--header-text);
+            padding: 0.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1.2rem;
+            transition: all 0.2s ease;
+        }
+
+        .theme-toggle:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            background: linear-gradient(135deg, var(--success-color) 0%, #2f855a 100%);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+            box-shadow: 0 0 8px rgba(81, 207, 102, 0.5);
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 280px;
+            background: var(--bg-secondary);
+            border-right: 2px solid var(--border-color);
+            padding: 1.5rem;
+            overflow-y: auto;
+            backdrop-filter: blur(10px);
+        }
+
+        .sidebar h3 {
+            color: var(--text-primary);
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .user-list {
+            list-style: none;
+        }
+
+        .user-item {
+            padding: 0.5rem;
+            border-radius: 4px;
+            margin-bottom: 0.25rem;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .user-item:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .user-avatar {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent-color) 0%, var(--accent-hover) 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: white;
+            border: 2px solid var(--border-color);
+            box-shadow: var(--shadow);
+        }
+
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: var(--bg-secondary);
+        }
+
+        .chat-header {
+            padding: 1.25rem 2rem;
+            border-bottom: 2px solid var(--border-color);
+            background: var(--bg-secondary);
+            backdrop-filter: blur(10px);
+        }
+
+        .chat-header h2 {
+            color: var(--text-primary);
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        .messages-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem 2rem;
+            background: var(--bg-tertiary);
+        }
+
+        .message {
+            margin-bottom: 1rem;
+            padding: 1rem;
+            border-radius: 12px;
+            background: var(--bg-secondary);
+            box-shadow: var(--shadow);
+            animation: slideIn 0.3s ease-out;
+            border: 1px solid var(--border-color);
+            transition: all 0.2s ease;
+        }
+
+        .message:hover {
+            box-shadow: var(--shadow-hover);
+            transform: translateY(-1px);
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .message-username {
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-right: 0.5rem;
+        }
+
+        .message-timestamp {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .message-content {
+            color: var(--text-secondary);
+            line-height: 1.4;
+        }
+
+        .message.ai {
+            border-left: 4px solid var(--ai-color);
+        }
+
+        .message.error {
+            border-left: 4px solid var(--error-color);
+        }
+
+        .message.user {
+            border-left: 4px solid var(--success-color);
+        }
+
+        .message.user_censored {
+            border-left: 4px solid var(--error-color);
+            opacity: 0.7;
+        }
+
+        .message.moderator {
+            border-left: 4px solid #ffc107;
+            background: linear-gradient(135deg, rgba(255, 193, 7, 0.1) 0%, rgba(255, 193, 7, 0.05) 100%);
+        }
+
+        .message.security_block {
+            border-left: 4px solid #dc3545;
+            background: linear-gradient(135deg, rgba(220, 53, 69, 0.1) 0%, rgba(220, 53, 69, 0.05) 100%);
+        }
+
+        .censored-text {
+            color: var(--text-muted);
+            font-style: italic;
+        }
+
+        .moderator-badge {
+            background: #ffc107;
+            color: #000;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            margin-left: 0.5rem;
+        }
+
+        .security-badge {
+            background: #dc3545;
+            color: #fff;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            margin-left: 0.5rem;
+        }
+
+        .input-container {
+            padding: 1rem 2rem;
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border-color);
+        }
+
+        .message-input {
+            display: flex;
+            gap: 1rem;
+            align-items: flex-end;
+        }
+
+        .input-field {
+            flex: 1;
+            padding: 1rem 1.25rem;
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            font-size: 0.95rem;
+            resize: none;
+            min-height: 48px;
+            max-height: 120px;
+            font-family: inherit;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            transition: all 0.2s ease;
+        }
+
+        .input-field:focus {
+            outline: none;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(77, 171, 247, 0.15);
+            transform: translateY(-1px);
+        }
+
+        .button-group {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .send-button, .ai-button {
+            padding: 0.875rem 1.25rem;
+            border: none;
+            border-radius: 12px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .send-button {
+            background: linear-gradient(135deg, var(--accent-color) 0%, var(--accent-hover) 100%);
+            color: white;
+            border: 2px solid var(--accent-color);
+        }
+
+        .send-button:hover {
+            background: linear-gradient(135deg, var(--accent-hover) 0%, #2b6cb0 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(77, 171, 247, 0.3);
+        }
+
+        .send-button:disabled {
+            background: var(--text-muted);
+            cursor: not-allowed;
+        }
+
+        .ai-button {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .ai-button:hover {
+            background: var(--border-color);
+        }
+
+        .ai-button.chatgpt {
+            background: linear-gradient(135deg, #10a37f 0%, #0d8a6b 100%);
+            color: white;
+            border: 2px solid #10a37f;
+        }
+
+        .ai-button.chatgpt:hover {
+            background: linear-gradient(135deg, #0d8a6b 0%, #0a6b52 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(16, 163, 127, 0.3);
+        }
+
+        .ai-button.anthropic {
+            background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+            color: white;
+            border: 2px solid #d97706;
+        }
+
+        .ai-button.anthropic:hover {
+            background: linear-gradient(135deg, #b45309 0%, #92400e 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(217, 119, 6, 0.3);
+        }
+
+        .ai-command-hint {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 0.5rem;
+        }
+
+        .typing-indicator {
+            padding: 0.5rem 2rem;
+            color: var(--text-muted);
+            font-style: italic;
+            font-size: 0.9rem;
+        }
+
+        .connection-status {
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            font-weight: 500;
+        }
+
+        .connection-status.connected {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .connection-status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        [data-theme="dark"] .connection-status.connected {
+            background: #0f5132;
+            color: #d1e7dd;
+            border: 1px solid #146c43;
+        }
+
+        [data-theme="dark"] .connection-status.disconnected {
+            background: #842029;
+            color: #f8d7da;
+            border: 1px solid #b02a37;
+        }
+
+        .emoji-picker {
+            position: absolute;
+            bottom: 100%;
+            right: 0;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-shadow: var(--shadow-hover);
+            padding: 0.5rem;
+            display: none;
+        }
+
+        .emoji-button {
+            background: none;
+            border: none;
+            font-size: 1.2rem;
+            cursor: pointer;
+            padding: 0.25rem;
+            border-radius: 4px;
+        }
+
+        .emoji-button:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .user-count {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>💬 NatiChat</h1>
+        <div class="header-controls">
+            <div class="connection-status" id="connectionStatus">
+                Connecting...
+            </div>
+            <button class="theme-toggle" id="themeToggle">🌙</button>
+            <div class="user-info">
+                <div class="status-indicator"></div>
+                <span>{{ username }}</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="sidebar">
+            <h3>👥 Online Users</h3>
+            <ul class="user-list" id="userList">
+                <!-- Users will be populated here -->
+            </ul>
+            <div class="user-count" id="userCount">0 users online</div>
+        </div>
+
+        <div class="chat-container">
+            <div class="chat-header">
+                <h2># general</h2>
+            </div>
+
+            <div class="messages-container" id="messagesContainer">
+                {% for message in messages %}
+                <div class="message {{ message.type }}">
+                    <div class="message-header">
+                        <span class="message-username">
+                            {{ message.username }}
+                            {% if message.type == 'moderator' %}
+                            <span class="moderator-badge">MODERATOR</span>
+                            {% elif message.type == 'security_block' %}
+                            <span class="security-badge">SECURITY</span>
+                            {% endif %}
+                        </span>
+                        <span class="message-timestamp">{{ message.timestamp }}</span>
+                    </div>
+                    <div class="message-content">
+                        {% if message.type == 'user_censored' %}
+                        <span class="censored-text">{{ message.message }}</span>
+                        {% if message.original_length %}
+                        <small>(original: {{ message.original_length }} chars)</small>
+                        {% endif %}
+                        {% else %}
+                        {{ message.message }}
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="typing-indicator" id="typingIndicator" style="display: none;">
+                Someone is typing...
+            </div>
+
+            <div class="input-container">
+                <div class="message-input">
+                    <textarea 
+                        id="messageInput" 
+                        class="input-field" 
+                        placeholder="Type a message... Use '/chatgpt <prompt>' or '/claude <prompt>'"
+                        rows="1"
+                    ></textarea>
+                    <div class="button-group">
+                        <button id="chatgptButton" class="ai-button chatgpt" title="Ask ChatGPT">
+                            🤖 ChatGPT
+                        </button>
+                        <button id="anthropicButton" class="ai-button anthropic" title="Ask Claude">
+                            🧠 Claude
+                        </button>
+                        <button id="sendButton" class="send-button">Send</button>
+                    </div>
+                </div>
+                <div class="ai-command-hint">
+                    💡 Tip: Try "/chatgpt explain recursion" or "/claude summarize this..." or use the AI buttons above
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Theme management
+        const themeToggle = document.getElementById('themeToggle');
+        const body = document.body;
+        
+        // Load saved theme (default to dark)
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        body.setAttribute('data-theme', savedTheme);
+        updateThemeIcon(savedTheme);
+        
+        themeToggle.addEventListener('click', () => {
+            const currentTheme = body.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            body.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            updateThemeIcon(newTheme);
+        });
+        
+        function updateThemeIcon(theme) {
+            themeToggle.textContent = theme === 'dark' ? '☀️' : '🌙';
+        }
+
+        // Initialize Socket.IO
+        const socket = io();
+        const messagesContainer = document.getElementById('messagesContainer');
+        const messageInput = document.getElementById('messageInput');
+        const sendButton = document.getElementById('sendButton');
+        const chatgptButton = document.getElementById('chatgptButton');
+        const anthropicButton = document.getElementById('anthropicButton');
+        const userList = document.getElementById('userList');
+        const userCount = document.getElementById('userCount');
+        const connectionStatus = document.getElementById('connectionStatus');
+        const typingIndicator = document.getElementById('typingIndicator');
+
+        let typingTimeout;
+        let currentUsers = new Set();
+
+        // Connection status
+        socket.on('connect', () => {
+            connectionStatus.textContent = 'Connected';
+            connectionStatus.className = 'connection-status connected';
+        });
+
+        socket.on('disconnect', () => {
+            connectionStatus.textContent = 'Disconnected';
+            connectionStatus.className = 'connection-status disconnected';
+        });
+
+        // Handle new messages
+        socket.on('new_message', (message) => {
+            addMessageToUI(message);
+        });
+
+        // Handle user updates
+        socket.on('user_joined', (data) => {
+            currentUsers.add(data.username);
+            updateUserList();
+        });
+
+        socket.on('user_left', (data) => {
+            currentUsers.delete(data.username);
+            updateUserList();
+        });
+
+        // Handle status messages
+        socket.on('status', (data) => {
+            console.log('Status:', data.message);
+        });
+
+        // Auto-resize textarea
+        messageInput.addEventListener('input', () => {
+            messageInput.style.height = 'auto';
+            messageInput.style.height = Math.min(messageInput.scrollHeight, 120) + 'px';
+        });
+
+        // Send message on Enter (but allow Shift+Enter for new lines)
+        messageInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        // Send button click
+        sendButton.addEventListener('click', sendMessage);
+
+        // AI buttons
+        chatgptButton.addEventListener('click', () => {
+            let currentValue = messageInput.value.trim();
+            
+            // Check if it already starts with /chatgpt - if so, do nothing
+            if (currentValue.toLowerCase().startsWith('/chatgpt ')) {
+                messageInput.focus();
+                return;
+            }
+            
+            // Remove ALL AI prefixes first
+            currentValue = currentValue.replace(/^\/chatgpt\s*/i, '');
+            currentValue = currentValue.replace(/^\/claude\s*/i, '');
+            
+            // Add the chatgpt prefix
+            if (currentValue) {
+                messageInput.value = `/chatgpt ${currentValue}`;
+            } else {
+                messageInput.value = '/chatgpt ';
+            }
+            messageInput.focus();
+            // Position cursor at the end
+            messageInput.setSelectionRange(messageInput.value.length, messageInput.value.length);
+        });
+
+        anthropicButton.addEventListener('click', () => {
+            let currentValue = messageInput.value.trim();
+            
+            // Check if it already starts with /claude - if so, do nothing
+            if (currentValue.toLowerCase().startsWith('/claude ')) {
+                messageInput.focus();
+                return;
+            }
+            
+            // Remove ALL AI prefixes first
+            currentValue = currentValue.replace(/^\/chatgpt\s*/i, '');
+            currentValue = currentValue.replace(/^\/claude\s*/i, '');
+            
+            // Add the claude prefix
+            if (currentValue) {
+                messageInput.value = `/claude ${currentValue}`;
+            } else {
+                messageInput.value = '/claude ';
+            }
+            messageInput.focus();
+            // Position cursor at the end
+            messageInput.setSelectionRange(messageInput.value.length, messageInput.value.length);
+        });
+
+        // Typing indicator
+        messageInput.addEventListener('input', () => {
+            socket.emit('typing');
+            clearTimeout(typingTimeout);
+            typingTimeout = setTimeout(() => {
+                socket.emit('stop_typing');
+            }, 1000);
+        });
+
+        socket.on('user_typing', () => {
+            typingIndicator.style.display = 'block';
+            setTimeout(() => {
+                typingIndicator.style.display = 'none';
+            }, 3000);
+        });
+
+        function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message) return;
+
+            // Check if it's an AI command
+            if (message.toLowerCase().startsWith('/chatgpt ')) {
+                const prompt = message.substring(9);
+                sendAIMessage(prompt, 'chatgpt');
+                return;
+            } else if (message.toLowerCase().startsWith('/claude ')) {
+                const prompt = message.substring(8);
+                sendAIMessage(prompt, 'anthropic');
+                return;
+            }
+
+            // Regular message
+            sendRegularMessage(message);
+        }
+
+        function sendRegularMessage(message) {
+            // Disable send button while sending
+            sendButton.disabled = true;
+            sendButton.textContent = 'Sending...';
+
+            fetch('/api/messages', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ message: message })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    // Handle 403 (blocked) responses
+                    return response.json().then(data => {
+                        console.log('Message blocked by proxy:', data.block_type, data.error);
+                        return data;
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    console.log('Security system blocked message:', data.block_type);
+                    // No need to show error to user - they'll see the security system response in chat
+                } else {
+                    console.log('Message sent successfully');
+                }
+            })
+            .catch(error => {
+                console.error('Error sending message:', error);
+                // Show a user-friendly error message
+                alert('Failed to send message. Please try again.');
+            })
+            .finally(() => {
+                messageInput.value = '';
+                messageInput.style.height = 'auto';
+                sendButton.disabled = false;
+                sendButton.textContent = 'Send';
+            });
+        }
+
+        function sendAIMessage(prompt, aiType) {
+            const endpoint = aiType === 'chatgpt' ? '/chatgpt' : '/claude';
+            const button = aiType === 'chatgpt' ? chatgptButton : anthropicButton;
+            
+            // Disable AI button while processing
+            button.disabled = true;
+            button.textContent = aiType === 'chatgpt' ? '🤖 Processing...' : '🧠 Processing...';
+
+            fetch(endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ prompt: prompt })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    console.error('Error:', data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error sending AI message:', error);
+            })
+            .finally(() => {
+                messageInput.value = '';
+                messageInput.style.height = 'auto';
+                button.disabled = false;
+                button.textContent = aiType === 'chatgpt' ? '🤖 ChatGPT' : '🧠 Claude';
+            });
+        }
+
+        function addMessageToUI(message) {
+            const messageElement = document.createElement('div');
+            messageElement.className = `message ${message.type}`;
+            
+            const timestamp = new Date(message.timestamp).toLocaleTimeString();
+            
+            let usernameDisplay = message.username;
+            if (message.type === 'moderator') {
+                usernameDisplay += '<span class="moderator-badge">MODERATOR</span>';
+            } else if (message.type === 'security_block') {
+                usernameDisplay += '<span class="security-badge">SECURITY</span>';
+            }
+            
+            let messageContent = escapeHtml(message.message);
+            if (message.type === 'user_censored') {
+                messageContent = `<span class="censored-text">${messageContent}</span>`;
+                if (message.original_length) {
+                    messageContent += ` <small>(original: ${message.original_length} chars)</small>`;
+                }
+            }
+            
+            messageElement.innerHTML = `
+                <div class="message-header">
+                    <span class="message-username">${usernameDisplay}</span>
+                    <span class="message-timestamp">${timestamp}</span>
+                </div>
+                <div class="message-content">${messageContent}</div>
+            `;
+            
+            messagesContainer.appendChild(messageElement);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function updateUserList() {
+            fetch('/api/users')
+                .then(response => response.json())
+                .then(users => {
+                    userList.innerHTML = '';
+                    currentUsers.clear();
+                    
+                    users.forEach(user => {
+                        currentUsers.add(user);
+                        const li = document.createElement('li');
+                        li.className = 'user-item';
+                        
+                        const avatar = document.createElement('div');
+                        avatar.className = 'user-avatar';
+                        avatar.textContent = user.charAt(0).toUpperCase();
+                        
+                        const span = document.createElement('span');
+                        span.textContent = user;
+                        
+                        li.appendChild(avatar);
+                        li.appendChild(span);
+                        userList.appendChild(li);
+                    });
+                    
+                    userCount.textContent = `${users.length} user${users.length !== 1 ? 's' : ''} online`;
+                })
+                .catch(error => {
+                    console.error('Error fetching users:', error);
+                });
+        }
+
+        // Update user list periodically (reduced frequency to reduce server load)
+        setInterval(updateUserList, 30000); // Changed from 5000ms to 30000ms (30 seconds)
+        updateUserList();
+
+        // Focus on input when page loads
+        messageInput.focus();
+    </script>
+</body>
+</html>

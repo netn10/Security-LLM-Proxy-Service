@@ -1,13 +1,20 @@
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
-import { Response } from 'express';
+import { Response, Request } from 'express';
 import { firstValueFrom } from 'rxjs';
 import { DataSanitizationService } from './data-sanitization.service';
 import { CacheService } from './cache.service';
 import { LoggingService } from './logging.service';
 import { PolicyEnforcementService } from './policy-enforcement.service';
+import { RateLimitingService } from './rate-limiting.service';
+import { MonitoringGateway } from './monitoring.gateway';
 import { RequestAction } from './entities/request-log.entity';
+import { FinancialContentException } from './exceptions/financial-content.exception';
+import { TimeBlockedException } from './exceptions/time-blocked.exception';
+import { RateLimitedException } from './exceptions/rate-limited.exception';
+import { SensitiveDataException } from './exceptions/sensitive-data.exception';
+import { formatTimestamp } from '../common/utils/timestamp.util';
 import * as https from 'https';
 import * as http from 'http';
 import { URL } from 'url';
@@ -21,6 +28,8 @@ export class ProxyService {
     private readonly cacheService: CacheService,
     private readonly loggingService: LoggingService,
     private readonly policyEnforcementService: PolicyEnforcementService,
+    private readonly rateLimitingService: RateLimitingService,
+    private readonly monitoringGateway: MonitoringGateway,
   ) {}
 
   /**
@@ -33,6 +42,7 @@ export class ProxyService {
     body: any,
     headers: Record<string, string>,
     res: Response,
+    req?: Request,
   ): Promise<void> {
     const startTime = Date.now();
     let action: RequestAction = RequestAction.PROXIED;
@@ -40,7 +50,37 @@ export class ProxyService {
     let sanitizedBody = body; // Initialize sanitizedBody
 
     try {
-      // Phase 3: Time-based blocking
+      // Phase 1: Rate limiting
+      if (req && this.shouldApplyRateLimiting()) {
+        const clientIP = this.getClientIP(req);
+        const tokensRequired = this.getTokensRequired(path, method);
+        
+        if (!(await this.rateLimitingService.isAllowed(clientIP, tokensRequired))) {
+          action = RequestAction.BLOCKED_RATE_LIMIT;
+          errorMessage = 'Request blocked due to rate limiting';
+          
+          await this.loggingService.logRequest(
+            provider,
+            body,
+            action,
+            path,
+            Date.now() - startTime,
+            errorMessage,
+          );
+
+          // Broadcast to monitoring dashboard
+          this.monitoringGateway.broadcastRequestEvent({
+            provider,
+            action,
+            path,
+            timestamp: new Date().toISOString(),
+          });
+
+          throw new RateLimitedException();
+        }
+      }
+
+      // Phase 2: Time-based blocking
       if (this.shouldBlockByTime()) {
         action = RequestAction.BLOCKED_TIME;
         errorMessage = 'Request blocked due to time-based policy';
@@ -54,23 +94,50 @@ export class ProxyService {
           errorMessage,
         );
 
-        throw new HttpException(
-          {
-            error: {
-              message: 'Request blocked due to time-based policy',
-              code: 'TIME_BLOCKED',
-            },
-          },
-          HttpStatus.FORBIDDEN,
-        );
+        // Broadcast to monitoring dashboard
+        this.monitoringGateway.broadcastRequestEvent({
+          provider,
+          action,
+          path,
+          timestamp: new Date().toISOString(),
+        });
+
+        throw new TimeBlockedException();
       }
 
-      // Phase 2: Apply data sanitization for specific endpoints
-      sanitizedBody = this.shouldSanitizeEndpoint(path) 
-        ? this.dataSanitizationService.sanitizeData(body)
-        : body;
+      // Phase 3: Apply data sanitization for specific endpoints
+      try {
+        sanitizedBody = this.shouldSanitizeEndpoint(path) 
+          ? await this.dataSanitizationService.sanitizeData(body)
+          : body;
+      } catch (error) {
+        if (error instanceof SensitiveDataException) {
+          action = RequestAction.BLOCKED_SENSITIVE_DATA;
+          errorMessage = 'Request blocked due to sensitive data detection';
+          
+          await this.loggingService.logRequest(
+            provider,
+            body,
+            action,
+            path,
+            Date.now() - startTime,
+            errorMessage,
+          );
 
-      // Phase 5: LLM-based policy enforcement for supported endpoints
+          // Broadcast to monitoring dashboard
+          this.monitoringGateway.broadcastRequestEvent({
+            provider,
+            action,
+            path,
+            timestamp: new Date().toISOString(),
+          });
+
+          throw error;
+        }
+        throw error; // Re-throw other errors
+      }
+
+      // Phase 4: LLM-based policy enforcement for supported endpoints
       if (this.shouldEnforcePolicy(path) && await this.policyEnforcementService.shouldBlockFinancialContent(sanitizedBody)) {
         action = RequestAction.BLOCKED_FINANCIAL;
         errorMessage = 'Request blocked due to financial content policy';
@@ -84,18 +151,18 @@ export class ProxyService {
           errorMessage,
         );
 
-        throw new HttpException(
-          {
-            error: {
-              message: 'Request blocked due to financial content policy',
-              code: 'FINANCIAL_BLOCKED',
-            },
-          },
-          HttpStatus.FORBIDDEN,
-        );
+        // Broadcast to monitoring dashboard
+        this.monitoringGateway.broadcastRequestEvent({
+          provider,
+          action,
+          path,
+          timestamp: new Date().toISOString(),
+        });
+
+        throw new FinancialContentException();
       }
 
-      // Phase 3: Check cache for identical requests
+      // Phase 5: Check cache for identical requests
       if (this.shouldUseCache(path)) {
         const cacheKey = this.cacheService.generateCacheKey(provider, path, sanitizedBody);
         const cachedResponse = await this.cacheService.get(cacheKey);
@@ -111,10 +178,26 @@ export class ProxyService {
             Date.now() - startTime,
           );
 
+          // Broadcast to monitoring dashboard
+          this.monitoringGateway.broadcastRequestEvent({
+            provider,
+            action,
+            path,
+            timestamp: new Date().toISOString(),
+          });
+
           // Return cached response
           res.status(cachedResponse.status);
+          const skipCachedHeaders = new Set([
+            'transfer-encoding',
+            'content-length',
+            'connection',
+            'keep-alive',
+            'content-encoding',
+          ]);
           Object.entries(cachedResponse.headers || {}).forEach(([key, value]) => {
-            if (typeof value === 'string') {
+            const lowerKey = key.toLowerCase();
+            if (typeof value === 'string' && !skipCachedHeaders.has(lowerKey)) {
               res.setHeader(key, value);
             }
           });
@@ -132,7 +215,6 @@ export class ProxyService {
 
       // Make the request to the target API using native Node.js
       const targetURL = `${baseURL}${path}`;
-      console.log(`📡 Forwarding to: ${method} ${targetURL}`);
 
       const response = await this.makeNativeRequest(
         method,
@@ -141,7 +223,7 @@ export class ProxyService {
         targetHeaders,
       );
 
-      // Phase 3: Cache successful responses
+      // Phase 6: Cache successful responses
       if (this.shouldUseCache(path) && response.status === 200) {
         const cacheKey = this.cacheService.generateCacheKey(provider, path, sanitizedBody);
         const cacheTTL = this.configService.get<number>('CACHE_TTL', 300);
@@ -157,20 +239,36 @@ export class ProxyService {
       res.status(response.status);
       
       // Copy response headers
+      const skipHeaders = new Set([
+        'transfer-encoding',
+        'content-length',
+        'connection',
+        'keep-alive',
+        'content-encoding',
+      ]);
       Object.entries(response.headers).forEach(([key, value]) => {
-        if (typeof value === 'string') {
+        const lowerKey = key.toLowerCase();
+        if (typeof value === 'string' && !skipHeaders.has(lowerKey)) {
           res.setHeader(key, value);
         }
       });
 
       res.send(response.data);
 
+      // Broadcast successful proxy request to monitoring dashboard
+      this.monitoringGateway.broadcastRequestEvent({
+        provider,
+        action,
+        path,
+        timestamp: new Date().toISOString(),
+      });
+
     } catch (error) {
       if (error instanceof HttpException) {
         throw error; // Re-throw our custom exceptions
       }
 
-      console.error('❌ Proxy error:', error.message);
+      console.error(`[${formatTimestamp()}] ❌ Proxy error:`, error.message);
       errorMessage = error.message;
       action = RequestAction.PROXIED; // Still log as proxied even if it failed
       
@@ -179,8 +277,14 @@ export class ProxyService {
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     } finally {
-      // Phase 4: Log the request (if not already logged)
-      if (action !== RequestAction.BLOCKED_TIME && action !== RequestAction.BLOCKED_FINANCIAL) {
+      // Phase 7: Log the request (if not already logged)
+      const blockedActions = [
+        RequestAction.BLOCKED_TIME,
+        RequestAction.BLOCKED_FINANCIAL,
+        RequestAction.BLOCKED_RATE_LIMIT,
+        RequestAction.BLOCKED_SENSITIVE_DATA
+      ];
+      if (!blockedActions.includes(action)) {
         await this.loggingService.logRequest(
           provider,
           sanitizedBody || body,
@@ -325,6 +429,9 @@ export class ProxyService {
       headers['Content-Type'] = 'application/json';
     }
 
+    // Request identity encoding to avoid compression-related header conflicts
+    headers['Accept-Encoding'] = 'identity';
+
     return headers;
   }
 
@@ -400,5 +507,51 @@ export class ProxyService {
 
       req.end();
     });
+  }
+
+  /**
+   * Phase 1: Check if rate limiting should be applied
+   */
+  private shouldApplyRateLimiting(): boolean {
+    return this.configService.get<boolean>('ENABLE_RATE_LIMITING', true);
+  }
+
+  /**
+   * Get the client IP address from the request
+   */
+  private getClientIP(req: Request): string {
+    // Check for forwarded headers first (for proxy scenarios)
+    const forwardedFor = req.headers['x-forwarded-for'] as string;
+    if (forwardedFor) {
+      return forwardedFor.split(',')[0].trim();
+    }
+
+    const realIP = req.headers['x-real-ip'] as string;
+    if (realIP) {
+      return realIP;
+    }
+
+    // Fallback to connection remote address
+    return req.connection?.remoteAddress || req.socket?.remoteAddress || 'unknown';
+  }
+
+  /**
+   * Determine how many tokens a request should cost based on endpoint and method
+   */
+  private getTokensRequired(path: string, method: string): number {
+    // Base cost for all requests
+    let tokens = 1;
+
+    // Higher cost for expensive operations
+    if (path.includes('/chat/completions') || path.includes('/messages')) {
+      tokens = 5; // Chat completions are more expensive
+    }
+
+    // Higher cost for POST requests (they usually contain more data)
+    if (method.toUpperCase() === 'POST') {
+      tokens *= 2;
+    }
+
+    return tokens;
   }
 }

@@ -2,11 +2,14 @@ import { Module } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ProxyController } from './proxy.controller';
+import { DashboardController } from './dashboard.controller';
 import { ProxyService } from './proxy.service';
 import { DataSanitizationService } from './data-sanitization.service';
 import { CacheService } from './cache.service';
 import { LoggingService } from './logging.service';
 import { PolicyEnforcementService } from './policy-enforcement.service';
+import { RateLimitingService } from './rate-limiting.service';
+import { MonitoringGateway } from './monitoring.gateway';
 import { RequestLog } from './entities/request-log.entity';
 
 @Module({
@@ -20,13 +23,15 @@ import { RequestLog } from './entities/request-log.entity';
     }),
     TypeOrmModule.forFeature([RequestLog]),
   ],
-  controllers: [ProxyController],
+  controllers: [ProxyController, DashboardController],
   providers: [
     ProxyService,
     DataSanitizationService,
     CacheService,
     LoggingService,
     PolicyEnforcementService,
+    RateLimitingService,
+    MonitoringGateway,
   ],
 })
 export class ProxyModule {}

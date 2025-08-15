@@ -1,11 +1,9 @@
 import {
   Controller,
-  Post,
   All,
   Get,
   Req,
   Res,
-  Body,
   Headers,
   Param,
   Query,
@@ -14,6 +12,7 @@ import { Request, Response } from 'express';
 import { ProxyService } from './proxy.service';
 import { LoggingService } from './logging.service';
 import { RequestAction } from './entities/request-log.entity';
+import { formatTimestamp } from '../common/utils/timestamp.util';
 
 @Controller()
 export class ProxyController {
@@ -23,21 +22,36 @@ export class ProxyController {
   ) {}
 
   /**
-   * Health check endpoint
+   * Root endpoint with quick pointers
    */
+  @Get('/')
+  root() {
+    return {
+      message: 'Lasso Security LLM Proxy is running',
+      try: {
+        health: '/health',
+        openai: '/openai/*path',
+        anthropic: '/anthropic/*path',
+        stats: '/stats',
+        logs: '/logs'
+      }
+    };
+  }
+
   @Get('health')
   healthCheck() {
     return {
       status: 'ok',
       service: 'Lasso Security LLM Proxy',
-      timestamp: new Date().toISOString(),
+      timestamp: formatTimestamp(),
       endpoints: {
-        openai: '/openai/*',
-        anthropic: '/anthropic/*'
+        openai: '/openai/*path',
+        anthropic: '/anthropic/*path'
       },
       features: {
         dataSanitization: true,
         timeBasedBlocking: true,
+        rateLimiting: true,
         caching: true,
         policyEnforcement: true,
         logging: true,
@@ -45,26 +59,17 @@ export class ProxyController {
     };
   }
 
-  /**
-   * Phase 4: Get request statistics
-   */
   @Get('stats')
   async getStatistics() {
     return await this.loggingService.getStatistics();
   }
 
-  /**
-   * Phase 4: Get recent logs
-   */
   @Get('logs')
   async getRecentLogs(@Query('limit') limit?: string) {
     const limitNum = limit ? parseInt(limit) : 50;
     return await this.loggingService.getRecentLogs(limitNum);
   }
 
-  /**
-   * Phase 4: Get logs by action type
-   */
   @Get('logs/:action')
   async getLogsByAction(
     @Param('action') action: RequestAction,
@@ -74,19 +79,17 @@ export class ProxyController {
     return await this.loggingService.getLogsByAction(action, limitNum);
   }
 
-  /**
-   * Phase 1: Catch-all endpoint for OpenAI requests
-   * Handles all HTTP methods for paths starting with /openai/
-   */
   @All('openai/*path')
   async proxyOpenAI(
     @Req() req: Request,
     @Res() res: Response,
     @Headers() headers: Record<string, string>,
-    @Param('path') pathParam: string,
   ) {
-    const path = '/' + pathParam;
-    console.log(`🔄 Proxying OpenAI request: ${req.method} ${path}`);
+    // Extract the path from the original URL
+    const originalUrl = req.url;
+    const path = originalUrl.replace('/openai', '');
+    
+    console.log(`[${formatTimestamp()}] 🔄 Proxying OpenAI request: ${req.method} ${path}`);
     
     // Get raw body data
     let body: any = null;
@@ -101,22 +104,21 @@ export class ProxyController {
       body,
       headers,
       res,
+      req,
     );
   }
 
-  /**
-   * Phase 1: Catch-all endpoint for Anthropic requests
-   * Handles all HTTP methods for paths starting with /anthropic/
-   */
   @All('anthropic/*path')
   async proxyAnthropic(
     @Req() req: Request,
     @Res() res: Response,
     @Headers() headers: Record<string, string>,
-    @Param('path') pathParam: string,
   ) {
-    const path = '/' + pathParam;
-    console.log(`🔄 Proxying Anthropic request: ${req.method} ${path}`);
+    // Extract the path from the original URL
+    const originalUrl = req.url;
+    const path = originalUrl.replace('/anthropic', '');
+    
+    console.log(`[${formatTimestamp()}] 🔄 Proxying Anthropic request: ${req.method} ${path}`);
     
     // Get raw body data
     let body: any = null;
@@ -131,6 +133,7 @@ export class ProxyController {
       body,
       headers,
       res,
+      req,
     );
   }
 }

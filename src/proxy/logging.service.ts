@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { RequestLog, RequestAction } from './entities/request-log.entity';
+import { formatTimestamp } from '../common/utils/timestamp.util';
 
 @Injectable()
 export class LoggingService {
@@ -35,13 +36,13 @@ export class LoggingService {
       setImmediate(async () => {
         try {
           await this.requestLogRepository.save(log);
-          console.log(`📝 Logged request: ${action} for ${provider}`);
+          console.log(`[${formatTimestamp()}] 📝 Logged request: ${action} for ${provider}`);
         } catch (error) {
-          console.error('❌ Logging error:', error.message);
+          console.error(`[${formatTimestamp()}] ❌ Logging error:`, error.message);
         }
       });
     } catch (error) {
-      console.error('❌ Log creation error:', error.message);
+      console.error(`[${formatTimestamp()}] ❌ Log creation error:`, error.message);
     }
   }
 

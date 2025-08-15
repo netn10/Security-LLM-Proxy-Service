@@ -1,0 +1,58 @@
+export interface ModelConfig {
+  openai: {
+    default: string;
+    models: string[];
+  };
+  anthropic: {
+    default: string;
+    models: string[];
+  };
+  google: {
+    default: string;
+    models: string[];
+  };
+}
+
+export const MODEL_CONFIG: ModelConfig = {
+  openai: {
+    default: 'gpt-3.5-turbo',
+    models: [
+      'gpt-3.5-turbo',
+      'gpt-4',
+      'gpt-4-turbo',
+      'gpt-4o',
+      'gpt-4o-mini'
+    ]
+  },
+  anthropic: {
+    default: 'claude-3-5-sonnet-20241022',
+    models: [
+      'claude-3-haiku-20240307',
+      'claude-3-sonnet-20240229',
+      'claude-3-opus-20240229',
+      'claude-3-5-sonnet-20241022',
+      'claude-3-5-haiku-20241022'
+    ]
+  },
+  google: {
+    default: 'gemini-1.5-flash',
+    models: [
+      'gemini-1.5-flash',
+      'gemini-1.5-pro',
+      'gemini-pro'
+    ]
+  }
+};
+
+export function getDefaultModel(provider: keyof ModelConfig): string {
+  return MODEL_CONFIG[provider]?.default || 'gpt-3.5-turbo';
+}
+
+export function getAvailableModels(provider: keyof ModelConfig): string[] {
+  return MODEL_CONFIG[provider]?.models || [];
+}
+
+export function isValidModel(provider: keyof ModelConfig, model: string): boolean {
+  const models = getAvailableModels(provider);
+  return models.includes(model);
+}

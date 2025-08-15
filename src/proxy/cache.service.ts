@@ -2,8 +2,22 @@ import { Injectable, Inject } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 
+interface CacheStats {
+  hits: number;
+  misses: number;
+  size: number;
+  totalRequests: number;
+}
+
 @Injectable()
 export class CacheService {
+  private stats: CacheStats = {
+    hits: 0,
+    misses: 0,
+    size: 0,
+    totalRequests: 0
+  };
+
   constructor(@Inject(CACHE_MANAGER) private cacheManager: Cache) {}
 
   /**
@@ -19,9 +33,19 @@ export class CacheService {
    */
   async get(key: string): Promise<any | null> {
     try {
-      return await this.cacheManager.get(key);
+      this.stats.totalRequests++;
+      const result = await this.cacheManager.get(key);
+      
+      if (result !== null) {
+        this.stats.hits++;
+      } else {
+        this.stats.misses++;
+      }
+      
+      return result;
     } catch (error) {
       console.warn('Cache get error:', error.message);
+      this.stats.misses++;
       return null;
     }
   }
@@ -32,6 +56,7 @@ export class CacheService {
   async set(key: string, value: any, ttl: number = 300): Promise<void> {
     try {
       await this.cacheManager.set(key, value, ttl);
+      this.stats.size++;
     } catch (error) {
       console.warn('Cache set error:', error.message);
     }
@@ -43,5 +68,32 @@ export class CacheService {
   async shouldServeFromCache(key: string): Promise<boolean> {
     const cached = await this.get(key);
     return cached !== null;
+  }
+
+  /**
+   * Get cache statistics
+   */
+  getStats(): CacheStats {
+    return { ...this.stats };
+  }
+
+  /**
+   * Reset cache statistics
+   */
+  resetStats(): void {
+    this.stats = {
+      hits: 0,
+      misses: 0,
+      size: 0,
+      totalRequests: 0
+    };
+  }
+
+  /**
+   * Get cache hit rate
+   */
+  getHitRate(): number {
+    if (this.stats.totalRequests === 0) return 0;
+    return this.stats.hits / this.stats.totalRequests;
   }
 }
