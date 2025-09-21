@@ -1,4 +1,4 @@
-# Lasso Security LLM Proxy Service
+# Security LLM Proxy Service
 
 A secure and transparent intermediary for LLM applications that intercepts, inspects, and modifies outgoing requests before forwarding them to official LLM provider APIs.
 
@@ -19,8 +19,8 @@ A secure and transparent intermediary for LLM applications that intercepts, insp
 
 1. **Clone the repository (if not already done):**
    ```bash
-   git clone https://github.com/netn10/Lasso-Security-LLM-Proxy-Service.git
-   cd Lasso-Security-LLM-Proxy-Service
+   git clone https://github.com/netn10/Security-LLM-Proxy-Service.git
+   cd Security-LLM-Proxy-Service
    ```
 
 2. **Ensure Docker is running:**
@@ -108,7 +108,7 @@ A secure and transparent intermediary for LLM applications that intercepts, insp
 ```
 Client Application
        ↓
-   Lasso Proxy
+   Proxy
    ├── Rate Limiting
    ├── Time-based Blocking
    ├── Data Sanitization
@@ -131,9 +131,9 @@ ANTHROPIC_API_KEY=your_anthropic_key
 # Database
 DB_HOST=localhost
 DB_PORT=5432
-DB_USERNAME=lasso_user
-DB_PASSWORD=lasso_password
-DB_DATABASE=lasso_proxy
+DB_USERNAME=user
+DB_PASSWORD=password
+DB_DATABASE=proxy
 ```
 
 ### Optional Features
@@ -245,4 +245,4 @@ npm run start:prod
 
 ## 📄 License
 
-This project is part of the Lasso Proxy assignment.
+This project is part of an assignment.
